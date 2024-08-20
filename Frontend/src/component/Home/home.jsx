@@ -10,14 +10,18 @@ function Home() {
     const [quotafull, setQuotafull] = useState('');
     const [termination, setTermination] = useState('');
     const [uniqueId, setUniqueId] = useState('');
+    const [term,setTerm] = useState('')
+    const [comp,setComp] = useState('')
+    const [quote,setquote] = useState('')
 
     const handleProjectNameChange = (e) => {
         setProjectName(e.target.value);
     };
-
+    
     const handleInputChange = (e) => {
         const url = e.target.value;
-        const urlWithoutQuery = url.includes('?') ? url.split("?")[1] : '';
+        const queryIndex = url.indexOf('?');
+        const urlWithoutQuery = queryIndex !== -1 ? url.slice(queryIndex + 1) : '';
         setInputValue(urlWithoutQuery);
         setInputUrl(url);
     };
@@ -39,25 +43,13 @@ function Home() {
     };
 
     const generateMaskedLink = async () => {
-        console.log('Project Name:', projectName);
-        console.log('Masked URL:', maskedUrl);
-        console.log('Complete:', complete);
-        console.log('Quota Full:', quotafull);
-        console.log('Termination:', termination);
-        console.log('Unique ID:', uniqueId);
-    
         const customDomain = 'https://opiniomea.com/';
         const newUniqueId = Date.now().toString(); // Generate unique ID
-    
-        // Set the unique ID and masked URL after the state update completes
-        setUniqueId(newUniqueId);
-        
+
         const masked = `${customDomain}/redirect/${newUniqueId}?${inputValue}`;
         setMaskedUrl(masked);
-    
-        // Store the input URL in localStorage
-        localStorage.setItem(newUniqueId, inputUrl);
-    
+        setUniqueId(newUniqueId);
+
         try {
             const response = await fetch('http://localhost:4000/api/save-links', {
                 method: 'POST',
@@ -67,7 +59,7 @@ function Home() {
                 body: JSON.stringify({
                     uniqueId: newUniqueId,
                     projectName,
-                    maskedUrl: masked, // Use the new masked URL
+                    maskedUrl: masked, 
                     complete,
                     quotafull,
                     termination
@@ -75,16 +67,21 @@ function Home() {
             });
             const data = await response.json();
             console.log('Backend response:', data);
+            setComp(data.completeUrl);
+            setquote(data.quotaFullUrl);
+            setTerm(data.terminationUrl);
+            
         } catch (error) {
             console.error('Error sending data to the backend:', error);
         }
     };
-    
-    
+    const handleCopyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+      };
 
     return (
         <div className='container'>
-            <h1>Mask Your Survey Link</h1>
+           
             <div className='form-group'>
                 <label>Project Name</label>
                 <input
@@ -107,16 +104,7 @@ function Home() {
                 />
             </div>
 
-            <div className='form-group'>
-                <label>Replacement Value</label>
-                <input
-                    type="text"
-                    value={inputValue}
-                    onChange={handleValueChange}
-                    placeholder="Enter value to replace [%RID%]"
-                    className='form-control'
-                />
-            </div>
+
 
             <h2>Additional Sources</h2>
 
@@ -156,12 +144,57 @@ function Home() {
             <button onClick={generateMaskedLink} className='btn btn-primary'>Generate Masked Link</button>
 
             {maskedUrl && (
-                <div className='result'>
-                    <h2>Your Masked Link:</h2>
-                    <p>{maskedUrl}</p>
-                    <p>Replace [%RID%] in the survey link with your name or identifier.</p>
-                </div>
-            )}
+        <div className="result">
+          <div className="masked-link">
+            <h2>
+              Your Masked Link:
+              
+            </h2>
+            <p>{maskedUrl} <span
+                onClick={() => handleCopyToClipboard(maskedUrl)}
+                className="copy-icon"
+              >
+                📋
+              </span></p>
+          </div>
+          <div className="complete-link">
+            <h2>
+              Your Complete Link:
+              
+            </h2>
+            <p>{comp} <span
+                onClick={() => handleCopyToClipboard(comp)}
+                className="copy-icon"
+              >
+                📋
+              </span></p>
+          </div>
+          <div className="termination-link">
+            <h2>
+              Your Termination Link:
+              
+            </h2>
+            <p>{term}<span
+                onClick={() => handleCopyToClipboard(term)}
+                className="copy-icon"
+              >
+                📋
+              </span></p>
+          </div>
+          <div className="quota-full-link">
+            <h2>
+              Your Quota Full Link:
+              
+            </h2>
+            <p>{quote} <span
+                onClick={() => handleCopyToClipboard(quote)}
+                className="copy-icon"
+              >
+                📋
+              </span></p>
+          </div>
+        </div>
+      )}
         </div>
     );
 }
