@@ -4,11 +4,12 @@ import './home.css';
 function Home() {
     const [projectName, setProjectName] = useState('');
     const [inputUrl, setInputUrl] = useState('');
-    const [maskedUrl, setMaskedUrl] = useState('');
     const [inputValue, setInputValue] = useState('');
+    const [maskedUrl, setMaskedUrl] = useState('');
     const [complete, setComplete] = useState('');
     const [quotafull, setQuotafull] = useState('');
     const [termination, setTermination] = useState('');
+    const [uniqueId, setUniqueId] = useState('');
 
     const handleProjectNameChange = (e) => {
         setProjectName(e.target.value);
@@ -38,13 +39,25 @@ function Home() {
     };
 
     const generateMaskedLink = async () => {
-        const customDomain = 'http://localhost:5173';
-        const uniqueId = Date.now();
-        const masked = `${customDomain}/redirect/${uniqueId}?${inputValue}`;
-        localStorage.setItem(uniqueId, inputUrl);
+        console.log('Project Name:', projectName);
+        console.log('Masked URL:', maskedUrl);
+        console.log('Complete:', complete);
+        console.log('Quota Full:', quotafull);
+        console.log('Termination:', termination);
+        console.log('Unique ID:', uniqueId);
+    
+        const customDomain = 'https://opiniomea.com/';
+        const newUniqueId = Date.now().toString(); // Generate unique ID
+    
+        // Set the unique ID and masked URL after the state update completes
+        setUniqueId(newUniqueId);
+        
+        const masked = `${customDomain}/redirect/${newUniqueId}?${inputValue}`;
         setMaskedUrl(masked);
-
-        // Send data to the backend
+    
+        // Store the input URL in localStorage
+        localStorage.setItem(newUniqueId, inputUrl);
+    
         try {
             const response = await fetch('http://localhost:4000/api/save-links', {
                 method: 'POST',
@@ -52,8 +65,9 @@ function Home() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    uniqueId: newUniqueId,
                     projectName,
-                    maskedUrl,
+                    maskedUrl: masked, // Use the new masked URL
                     complete,
                     quotafull,
                     termination
@@ -65,6 +79,8 @@ function Home() {
             console.error('Error sending data to the backend:', error);
         }
     };
+    
+    
 
     return (
         <div className='container'>

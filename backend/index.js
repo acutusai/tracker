@@ -1,326 +1,341 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const sqlite3 = require('sqlite3').verbose();
+const mysql = require('mysql2');
 const cors = require('cors');
 
 const app = express();
 
+// Middleware setup
 app.use(cors({
-  origin: 'http://localhost:5173'
+  origin: 'https://opiniomea.com'
 }));
-
-const dbms = new sqlite3.Database('additional_urls.db', (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-  } else {
-    console.log('Connected to the additional_urls database.');
-  }
-});
-
-dbms.serialize(() => {
-  dbms.run(`
-    CREATE TABLE IF NOT EXISTS urls (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      maskedUrl TEXT,
-      complete TEXT,
-      quotafull TEXT,
-      termination TEXT
-    )
-  `);
-});
-
 app.use(bodyParser.json());
 
-const db = new sqlite3.Database('survey_data.db', (err) => {
+// MySQL database connection setup (as you had before)
+const dbms = mysql.createConnection({
+  host: 'localhost',
+  user: 'u411184336_Aditya_1234',
+  password: 'Acutusai_2468',
+  database: 'u411184336_urldata'
+});
+
+const db = mysql.createConnection({
+  host: 'localhost',
+  user: 'u411184336_Aditya_123',
+  password: 'Acutusai_2468',
+  database: 'u411184336_surveydata'
+});
+
+// Handle connection errors
+dbms.connect((err) => {
   if (err) {
-    console.error('Error opening database:', err.message);
+    console.error('Error connecting to MySQL additional_urls database:', err.message);
   } else {
-    console.log('Connected to the SQLite database.');
+    console.log('Connected to the additional_urls MySQL database.');
   }
 });
 
-db.serialize(() => {
-  db.run('CREATE TABLE IF NOT EXISTS infotable (id INTEGER PRIMARY KEY AUTOINCREMENT, rid TEXT UNIQUE)');
+db.connect((err) => {
+  if (err) {
+    console.error('Error connecting to MySQL survey_data database:', err.message);
+  } else {
+    console.log('Connected to the survey_data MySQL database.');
+  }
 });
 
-const getRedirectUrl = (action, callback) => {
-  dbms.get(`SELECT ${action} FROM urls ORDER BY id DESC LIMIT 1`, (err, row) => {
+// Create tables if they don't exist (as you had before)
+dbms.query(`
+  CREATE TABLE IF NOT EXISTS urls (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    projectName VARCHAR(255),
+    maskedUrl VARCHAR(255),
+    complete VARCHAR(255),
+    quotafull VARCHAR(255),
+    termination VARCHAR(255),
+    uniqueId VARCHAR(255) UNIQUE
+  )
+`, (err) => {
+  if (err) {
+    console.error('Error creating table in additional_urls database:', err.message);
+  }
+});
+
+db.query(`
+  CREATE TABLE IF NOT EXISTS infotable (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rid VARCHAR(255) UNIQUE
+  )
+`, (err) => {
+  if (err) {
+    console.error('Error creating table in survey_data database:', err.message);
+  }
+});
+
+// Function to get redirect URLs by uniqueId
+const getRedirectUrlsByUniqueId = (uniqueId, callback) => {
+  dbms.query('SELECT complete, quotafull, termination FROM urls WHERE uniqueId = ?', [uniqueId], (err, results) => {
     if (err) {
       console.error('Database error:', err.message);
       return callback(err);
     }
-    if (row && row[action]) {
-      callback(null, row[action]);
+    if (results.length > 0) {
+      callback(null, results[0]);
     } else {
-      callback(new Error('URL not found for action: ' + action));
+      callback(new Error('No URLs found for uniqueId: ' + uniqueId));
     }
   });
 };
 
-app.post('/api/surveys/terminate/:id', async (req, res) => {
+// Update your routes to include the /api prefix
+app.post('/api/surveys/terminate/:unique/:id', async (req, res) => {
+  const { unique } = req.params;
   const { id } = req.params;
 
-  getRedirectUrl('termination', async (err, redirectUrl) => {
+  getRedirectUrlsByUniqueId(unique, async (err, urls) => {
     if (err) {
-      return res.status(500).json({ error: 'Failed to get redirect URL' });
+      return res.status(500).json({ error: 'Failed to get redirect URLs' });
     }
 
     try {
-      const response = await axios.post(redirectUrl, { id });
+      const response = await axios.post(`${urls.termination}/${id}`);
       res.status(200).json({ message: `Survey with RID ${id} terminated.`, response: response.data });
     } catch (error) {
       console.error('Error posting data:', error.message);
-      res.status(500).json({ error: 'Failed to post data to redirect URL' });
+      res.status(500).json({ error: 'Failed to post data to termination URL' });
     }
   });
 });
 
-app.post('/api/surveys/quota-full/:id', async (req, res) => {
+app.post('/api/surveys/quota-full/:unique/:id', async (req, res) => {
+  const { unique } = req.params;
   const { id } = req.params;
 
-  getRedirectUrl('quotafull', async (err, redirectUrl) => {
+  getRedirectUrlsByUniqueId(unique, async (err, urls) => {
     if (err) {
-      return res.status(500).json({ error: 'Failed to get redirect URL' });
+      return res.status(500).json({ error: 'Failed to get redirect URLs' });
     }
 
     try {
-      const response = await axios.post(redirectUrl, { id });
+      const response = await axios.post(urls.quotafull, { id });
       res.status(200).json({ message: `Survey with RID ${id} marked as quota full.`, response: response.data });
     } catch (error) {
       console.error('Error posting data:', error.message);
-      res.status(500).json({ error: 'Failed to post data to redirect URL' });
+      res.status(500).json({ error: 'Failed to post data to quota-full URL' });
     }
   });
 });
 
-app.post('/api/surveys/complete/:id', async (req, res) => {
+app.post('/api/surveys/complete/:unique/:id', async (req, res) => {
+  const { unique } = req.params;
   const { id } = req.params;
 
-  getRedirectUrl('complete', async (err, redirectUrl) => {
+  getRedirectUrlsByUniqueId(unique, async (err, urls) => {
     if (err) {
-      return res.status(500).json({ error: 'Failed to get redirect URL' });
+      return res.status(500).json({ error: 'Failed to get redirect URLs' });
     }
 
     try {
-      const response = await axios.post(redirectUrl, { id });
+      const response = await axios.post(urls.complete, { id });
       res.status(200).json({ message: `Survey with RID ${id} completed.`, response: response.data });
     } catch (error) {
       console.error('Error posting data:', error.message);
-      res.status(500).json({ error: 'Failed to post data to redirect URL' });
+      res.status(500).json({ error: 'Failed to post data to complete URL' });
     }
   });
 });
 
 app.post('/api/save-links', (req, res) => {
-  const { maskedUrl, complete, quotafull, termination } = req.body;
+  const { uniqueId, projectName, maskedUrl, complete, quotafull, termination } = req.body;
 
-  if (!maskedUrl || !complete || !quotafull || !termination) {
+  if (!uniqueId || !projectName || !maskedUrl || !complete || !quotafull || !termination) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  dbms.run(`
-    INSERT INTO urls (maskedUrl, complete, quotafull, termination)
-    VALUES (?, ?, ?, ?)`,
-    [maskedUrl, complete, quotafull, termination], 
-    function (err) {
+  dbms.query(`
+    INSERT INTO urls (uniqueId, projectName, maskedUrl, complete, quotafull, termination)
+    VALUES (?, ?, ?, ?, ?, ?)`,
+    [uniqueId, projectName, maskedUrl, complete, quotafull, termination],
+    (err, results) => {
       if (err) {
         console.error('Database error:', err.message);
         return res.status(500).json({ error: 'Failed to save data' });
       }
-      console.log('Data saved successfully');
-      res.status(201).json({ id: this.lastID, message: 'Data saved successfully' });
+      res.status(201).json({ id: results.insertId, message: 'Data saved successfully' });
     }
   );
 });
 
+// Start the server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
 
-
-
-
-
-
-
-
 // const express = require('express');
 // const bodyParser = require('body-parser');
 // const axios = require('axios');
-// const sqlite3 = require('sqlite3').verbose();
+// const mysql = require('mysql2');
 // const cors = require('cors');
 
 // const app = express();
 
+// // Middleware setup
 // app.use(cors({
-//   origin: 'http://localhost:5173'
+//   origin: 'https://opiniomea.com/'
 // }));
-
-// const dbms = new sqlite3.Database('additional_urls.db', (err) => {
-//   if (err) {
-//     console.error('Error opening database:', err.message);
-//   } else {
-//     console.log('Connected to the additional_urls database.');
-//   }
-// });
-
-// dbms.serialize(() => {
-//   dbms.run(`
-//     CREATE TABLE IF NOT EXISTS urls (
-//       id INTEGER PRIMARY KEY AUTOINCREMENT,
-//       maskedUrl TEXT,
-//       complete TEXT,
-//       quotafull TEXT,
-//       termination TEXT
-//     )
-//   `);
-// });
-
 // app.use(bodyParser.json());
 
-// const db = new sqlite3.Database('survey_data.db', (err) => {
+// // MySQL database connection
+// const dbms = mysql.createConnection({
+//   host: 'localhost', // replace with your host
+//   user: 'u411184336_Aditya_1234', // replace with your MySQL username
+//   password: 'Acutusai_2468', // replace with your MySQL password
+//   database: 'u411184336_urldata' // replace with your database name
+// });
+
+// dbms.connect((err) => {
 //   if (err) {
-//     console.error('Error opening database:', err.message);
+//     console.error('Error connecting to MySQL additional_urls database:', err.message);
 //   } else {
-//     console.log('Connected to the SQLite database.');
+//     console.log('Connected to the additional_urls MySQL database.');
 //   }
 // });
 
-// db.serialize(() => {
-//   db.run('CREATE TABLE IF NOT EXISTS infotable (id INTEGER PRIMARY KEY AUTOINCREMENT, rid TEXT UNIQUE)');
+// const db = mysql.createConnection({
+//   host: 'localhost', // replace with your host
+//   user: 'u411184336_Aditya_123', // replace with your MySQL username
+//   password: 'Acutusai_2468', // replace with your MySQL password
+//   database: 'u411184336_surveydata' // replace with your database name
 // });
 
-// const getRedirectUrl = (action, callback) => {
-//   dbms.get(`SELECT ${action} FROM urls ORDER BY id DESC LIMIT 1`, (err, row) => {
+// db.connect((err) => {
+//   if (err) {
+//     console.error('Error connecting to MySQL survey_data database:', err.message);
+//   } else {
+//     console.log('Connected to the survey_data MySQL database.');
+//   }
+// });
+
+// // Create tables if they don't exist
+// dbms.query(`
+//   CREATE TABLE IF NOT EXISTS urls (
+//     id INT AUTO_INCREMENT PRIMARY KEY,
+//     projectName VARCHAR(255),
+//     maskedUrl VARCHAR(255),
+//     complete VARCHAR(255),
+//     quotafull VARCHAR(255),
+//     termination VARCHAR(255),
+//     uniqueId VARCHAR(255) UNIQUE
+//   )
+// `, (err) => {
+//   if (err) {
+//     console.error('Error creating table in additional_urls database:', err.message);
+//   }
+// });
+
+// db.query(`
+//   CREATE TABLE IF NOT EXISTS infotable (
+//     id INT AUTO_INCREMENT PRIMARY KEY,
+//     rid VARCHAR(255) UNIQUE
+//   )
+// `, (err) => {
+//   if (err) {
+//     console.error('Error creating table in survey_data database:', err.message);
+//   }
+// });
+
+// // Function to get redirect URLs by uniqueId
+// const getRedirectUrlsByUniqueId = (uniqueId, callback) => {
+//   dbms.query('SELECT complete, quotafull, termination FROM urls WHERE uniqueId = ?', [uniqueId], (err, results) => {
 //     if (err) {
 //       console.error('Database error:', err.message);
 //       return callback(err);
 //     }
-//     if (row && row[action]) {
-//       callback(null, row[action]);
+//     if (results.length > 0) {
+//       callback(null, results[0]);
 //     } else {
-//       callback(new Error('URL not found for action: ' + action));
+//       callback(new Error('No URLs found for uniqueId: ' + uniqueId));
 //     }
 //   });
 // };
 
-// app.post('/api/surveys/terminate/:id', async (req, res) => {
+// // API Endpoints
+// app.post('/api/surveys/terminate/:unique/:id', async (req, res) => {
+//   const { unique } = req.params;
 //   const { id } = req.params;
 
-//   getRedirectUrl('termination', async (err, redirectUrl) => {
+//   getRedirectUrlsByUniqueId(unique, async (err, urls) => {
 //     if (err) {
-//       return res.status(500).json({ error: 'Failed to get redirect URL' });
+//       return res.status(500).json({ error: 'Failed to get redirect URLs' });
 //     }
 
-//     // db.get('SELECT rid FROM infotable WHERE id = ?', [id], async (err, row) => {
-//     //   if (err) {
-//     //     console.error('Database error:', err.message);
-//     //     return res.status(500).json({ error: 'Failed to retrieve RID' });
-//     //   }
-
-//       // if (row) {
-//       //   const rid = row.rid;
-//       //   console.log('Completing survey with RID:', rid);
-//       //   console.log('Redirect URL:', redirectUrl);
-
-//         try {
-//           const response = await axios.post(redirectUrl, { id });
-//           res.status(200).json({ message: `Survey with RID ${id} completed.`, response: response.data });
-//         } catch (error) {
-//           console.error('Error posting data:', error.message);
-//           res.status(500).json({ error: 'Failed to post data to redirect URL' });
-//       //   }
-//       // } else {
-//       //   res.status(404).json({ error: 'No matching record found' });
-//       // }
-//     });
+//     try {
+//       const response = await axios.post(`${urls.termination}/${id}`);
+//       res.status(200).json({ message: `Survey with RID ${id} terminated.`, response: response.data });
+//     } catch (error) {
+//       console.error('Error posting data:', error.message);
+//       res.status(500).json({ error: 'Failed to post data to termination URL' });
+//     }
+//   });
 // });
 
-// app.post('/api/surveys/quota-full/:id', async (req, res) => {
+// app.post('/api/surveys/quota-full/:unique/:id', async (req, res) => {
+//   const { unique } = req.params;
 //   const { id } = req.params;
 
-//   getRedirectUrl('quotafull', async (err, redirectUrl) => {
+//   getRedirectUrlsByUniqueId(unique, async (err, urls) => {
 //     if (err) {
-//       return res.status(500).json({ error: 'Failed to get redirect URL' });
+//       return res.status(500).json({ error: 'Failed to get redirect URLs' });
 //     }
 
-//     // db.get('SELECT rid FROM infotable WHERE id = ?', [id], async (err, row) => {
-//     //   if (err) {
-//     //     console.error('Database error:', err.message);
-//     //     return res.status(500).json({ error: 'Failed to retrieve RID' });
-//     //   }
-
-//       // if (row) {
-//       //   const rid = row.rid;
-//       //   console.log('Completing survey with RID:', rid);
-//       //   console.log('Redirect URL:', redirectUrl);
-
-//         try {
-//           const response = await axios.post(redirectUrl, { id });
-//           res.status(200).json({ message: `Survey with RID ${id} completed.`, response: response.data });
-//         } catch (error) {
-//           console.error('Error posting data:', error.message);
-//           res.status(500).json({ error: 'Failed to post data to redirect URL' });
-//       //   }
-//       // } else {
-//       //   res.status(404).json({ error: 'No matching record found' });
-//       // }
-//     });
+//     try {
+//       const response = await axios.post(urls.quotafull, { id });
+//       res.status(200).json({ message: `Survey with RID ${id} marked as quota full.`, response: response.data });
+//     } catch (error) {
+//       console.error('Error posting data:', error.message);
+//       res.status(500).json({ error: 'Failed to post data to quota-full URL' });
+//     }
+//   });
 // });
 
-// app.post('/api/surveys/complete/:id', async (req, res) => {
+// app.post('/api/surveys/complete/:unique/:id', async (req, res) => {
+//   const { unique } = req.params;
 //   const { id } = req.params;
 
-//   getRedirectUrl('complete', async (err, redirectUrl) => {
+//   getRedirectUrlsByUniqueId(unique, async (err, urls) => {
 //     if (err) {
-//       return res.status(500).json({ error: 'Failed to get redirect URL' });
+//       return res.status(500).json({ error: 'Failed to get redirect URLs' });
 //     }
 
-//     // db.get('SELECT rid FROM infotable WHERE id = ?', [id], async (err, row) => {
-//     //   if (err) {
-//     //     console.error('Database error:', err.message);
-//     //     return res.status(500).json({ error: 'Failed to retrieve RID' });
-//     //   }
-
-//       // if (row) {
-//       //   const rid = row.rid;
-//       //   console.log('Completing survey with RID:', rid);
-//       //   console.log('Redirect URL:', redirectUrl);
-
-//         try {
-//           const response = await axios.post(redirectUrl, { id });
-//           res.status(200).json({ message: `Survey with RID ${id} completed.`, response: response.data });
-//         } catch (error) {
-//           console.error('Error posting data:', error.message);
-//           res.status(500).json({ error: 'Failed to post data to redirect URL' });
-//       //   }
-//       // } else {
-//       //   res.status(404).json({ error: 'No matching record found' });
-//       // }
-//     };
-// }});
+//     try {
+//       const response = await axios.post(urls.complete, { id });
+//       res.status(200).json({ message: `Survey with RID ${id} completed.`, response: response.data });
+//     } catch (error) {
+//       console.error('Error posting data:', error.message);
+//       res.status(500).json({ error: 'Failed to post data to complete URL' });
+//     }
+//   });
+// });
 
 // app.post('/api/save-links', (req, res) => {
-//   const { maskedUrl, complete, quotafull, termination } = req.body;
+//   const { uniqueId, projectName, maskedUrl, complete, quotafull, termination } = req.body;
 
-//   if (!maskedUrl || !complete || !quotafull || !termination) {
+//   if (!uniqueId || !projectName || !maskedUrl || !complete || !quotafull || !termination) {
 //     return res.status(400).json({ error: 'All fields are required' });
 //   }
 
-//   dbms.run(`
-//     INSERT INTO urls (maskedUrl, complete, quotafull, termination)
-//     VALUES (?, ?, ?, ?)`,
-//     [maskedUrl, complete, quotafull, termination], 
-//     function (err) {
+//   dbms.query(`
+//     INSERT INTO urls (uniqueId, projectName, maskedUrl, complete, quotafull, termination)
+//     VALUES (?, ?, ?, ?, ?, ?)`,
+//     [uniqueId, projectName, maskedUrl, complete, quotafull, termination],
+//     (err, results) => {
 //       if (err) {
 //         console.error('Database error:', err.message);
 //         return res.status(500).json({ error: 'Failed to save data' });
 //       }
-//       console.log('Data saved successfully');
-//       res.status(201).json({ id: this.lastID, message: 'Data saved successfully' });
+//       res.status(201).json({ id: results.insertId, message: 'Data saved successfully' });
 //     }
 //   );
 // });
@@ -329,3 +344,6 @@ app.listen(PORT, () => {
 // app.listen(PORT, () => {
 //   console.log(`Server is running on port ${PORT}`);
 // });
+
+
+
