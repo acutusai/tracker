@@ -5,17 +5,24 @@ import './project.css';
 
 function ProjectPage() {
   const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const response = await fetch('http://api.opiniomea.com/api/projects'); // Updated to use the production API URL
+        // Adjust API URL based on NGINX configuration
+        const response = await fetch('/api/projects');
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
         const data = await response.json();
-        console.log(data);
         setProjects(data);
       } catch (error) {
-        console.error('Error fetching projects:', error);
+        setError(error.message);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -36,31 +43,39 @@ function ProjectPage() {
         <p>Explore our latest projects and initiatives.</p>
       </header>
 
+      {loading && <p>Loading...</p>}
+      {error && <p>Error fetching projects: {error}</p>}
+
       <div className="project-grid">
-        {projects.map((project) => (
-          <div key={project._id} className="project-card">
-            <div className="project-content">
-              <h2 className="project-title">{project.projectName}</h2>
-              <p><strong>Unique ID:</strong> {project.uniqueId}</p>
-              <p><strong>Masked URL:</strong> {project.maskedUrl}</p>
-              {/* Uncomment and adjust if project includes URL details */}
-              {/* 
-              <div className="project-urls">
-                <h3>Associated URLs:</h3>
-                <p><strong>Complete URL:</strong> {project.complete}</p>
-                <p><strong>Quota Full URL:</strong> {project.quotafull}</p>
-                <p><strong>Termination URL:</strong> {project.termination}</p>
-              </div> 
-              */}
+        {projects.length > 0 ? (
+          projects.map((project) => (
+            <div key={project._id} className="project-card">
+              <div className="project-content">
+                <h2 className="project-title">{project.projectName}</h2>
+                <p><strong>Unique ID:</strong> {project.uniqueId}</p>
+                <p><strong>Masked URL:</strong> {project.maskedUrl}</p>
+                {/* Uncomment and adjust if project includes URL details */}
+                {/* 
+                <div className="project-urls">
+                  <h3>Associated URLs:</h3>
+                  <p><strong>Complete URL:</strong> {project.complete}</p>
+                  <p><strong>Quota Full URL:</strong> {project.quotafull}</p>
+                  <p><strong>Termination URL:</strong> {project.termination}</p>
+                </div> 
+                */}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          !loading && <p>No projects available.</p>
+        )}
       </div>
     </div>
   );
 }
 
 export default ProjectPage;
+
 
 // import React, { useState, useEffect } from 'react';
 // import { useNavigate } from 'react-router-dom';
