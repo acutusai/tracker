@@ -13,11 +13,12 @@ function Home() {
     const [term, setTerm] = useState('');
     const [comp, setComp] = useState('');
     const [quote, setQuote] = useState('');
+    const [error, setError] = useState(null);
 
     const handleProjectNameChange = (e) => {
         setProjectName(e.target.value);
     };
-    
+
     const handleInputChange = (e) => {
         const url = e.target.value;
         const queryIndex = url.indexOf('?');
@@ -51,7 +52,7 @@ function Home() {
         setUniqueId(newUniqueId);
 
         try {
-            const response = await fetch('http://api.opiniomea.com/api/save-links', {
+            const response = await fetch('/api/save-links', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -65,17 +66,22 @@ function Home() {
                     termination
                 }),
             });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
             const data = await response.json();
             console.log('Backend response:', data);
             setComp(data.completeUrl);
             setQuote(data.quotaFullUrl);
             setTerm(data.terminationUrl);
         } catch (error) {
-            console.error('Error sending data to the backend:', error);
+            setError(`Error sending data to the backend: ${error.message}`);
         }
-        
+
         try {
-            const response = await fetch('http://api.opiniomea.com/api/projects', {
+            const response = await fetch('/api/projects', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -86,11 +92,16 @@ function Home() {
                     maskedUrl
                 }),
             });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
             const data = await response.json();
             console.log('Backend response:', data);
             // Handle response if needed
         } catch (error) {
-            console.error('Error sending data to the backend:', error);
+            setError(`Error sending data to the backend: ${error.message}`);
         }
     };
 
@@ -199,11 +210,14 @@ function Home() {
                     </div>
                 </div>
             )}
+
+            {error && <p className="error-message">{error}</p>}
         </div>
     );
 }
 
 export default Home;
+
 
 // import React, { useState } from 'react';
 // import './home.css';
