@@ -35,7 +35,32 @@ mongoose.connect(dbURI, {
 })
   .then(() => console.log('Connected to MongoDB database.'))
   .catch((err) => console.error('Error connecting to MongoDB:', err.message));
+const initializeDatabase = async () => {
+  try {
+    const db = mongoose.connection.db;
 
+    // Check if collections exist, and create them if necessary
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(col => col.name);
+
+    if (!collectionNames.includes('projects')) {
+      await db.createCollection('projects');
+      console.log('Collection "projects" created.');
+    }
+
+    if (!collectionNames.includes('urls')) {
+      await db.createCollection('urls');
+      console.log('Collection "urls" created.');
+    }
+
+    if (!collectionNames.includes('info')) {
+      await db.createCollection('info');
+      console.log('Collection "info" created.');
+    }
+  } catch (err) {
+    console.error('Error during database initialization:', err);
+  }
+};
 // Define schemas and models
 const projectSchema = new mongoose.Schema({
   projectName: String,
